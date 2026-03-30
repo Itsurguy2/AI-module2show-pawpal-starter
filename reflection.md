@@ -61,13 +61,21 @@ The alternative — placing each task at its `preferred_time` and filling gaps �
 
 **a. How you used AI**
 
-- How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-- What kinds of prompts or questions were most helpful?
+AI was used as a collaborative engineering partner across every phase of this project, with a different role in each phase:
+
+- **Phase 1 — Design brainstorming:** AI helped identify the right set of classes from the scenario description, suggested the `SkippedTask` wrapper (which the initial UML missed), and caught the `init=False` dataclass issue before any code was written. The most effective prompt style was describing a *goal* ("I need the plan to explain why tasks were skipped") rather than asking for a code snippet directly.
+
+- **Phase 2 — Implementation:** AI generated method stubs and filled in logic for `_assign_time`, `_sort_tasks`, and `build_plan`. The most useful prompts were specific: "How should the Scheduler retrieve all tasks from the Owner's pets?" produced a clean `get_all_tasks()` pattern rather than a vague suggestion.
+
+- **Phase 3 — Algorithms:** AI brainstormed the conflict detection algorithm and the `next_occurrence` pattern using `dataclasses.replace()`. Asking "what are edge cases to test for a pet scheduler with sorting and recurring tasks?" produced a test plan that surfaced cases (zero budget, all tasks completed, exact same start time) that would have been easy to overlook.
+
+- **Phase 4 — Testing:** AI drafted test scaffolding quickly. The most valuable prompt pattern was asking AI to explain *why* a test was structured a certain way, which forced verification that the test was actually catching the right behavior.
 
 **b. Judgment and verification**
 
-- Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+During Phase 3, AI suggested using a dictionary (`{task: reason}`) to track skipped tasks instead of a `SkippedTask` dataclass. The suggestion was rejected for two reasons: a dictionary is harder to serialize, display in a table, and pass to typed functions, and it would have created an inconsistency — `ScheduledTask` is a dataclass, so `SkippedTask` should be one too for symmetry. The AI suggestion was evaluated by asking: "Does this fit the existing patterns in the codebase?" — it didn't, so the `SkippedTask` dataclass design was kept.
+
+A second example: AI initially suggested using `datetime.time` objects internally instead of `"HH:MM"` strings. The string format was kept because Streamlit displays strings directly without conversion, and the `"%H:%M"` format is readable in the UI without extra formatting code.
 
 ---
 
@@ -75,13 +83,26 @@ The alternative — placing each task at its `preferred_time` and filling gaps �
 
 **a. What you tested**
 
-- What behaviors did you test?
-- Why were these tests important?
+The test suite covers 44 behaviors across five areas:
+
+1. **Core data classes** — `CareTask.mark_complete()`, `is_schedulable()`, `Pet.add_task()`, and `Owner.add_pet()` confirm that the building blocks of the system work in isolation before testing combinations.
+
+2. **Scheduling logic** — Tests verify that mandatory tasks are always first, that tasks exceeding the budget are skipped with a reason, and that `total_minutes_used` exactly matches the sum of scheduled durations. These are critical because a scheduler that silently drops tasks or miscounts time would be unusable in practice.
+
+3. **Smart algorithms** — `sort_by_time`, `filter_by_status`, `next_occurrence`, and `detect_conflicts` each have dedicated tests including both happy paths and edge cases. A test for `sort_by_time` on an already-sorted list verifies stability; a test for `detect_conflicts` with three tasks (only one pair overlapping) verifies the algorithm doesn't over-report.
+
+4. **Edge cases** — Pet with no tasks, zero time budget, all tasks already completed, a task that exactly fills the budget, exact same start time conflicts, and `once`-frequency tasks returning `None` from `next_occurrence`. These catch off-by-one errors and boundary conditions that don't appear in normal use.
+
+5. **Output quality** — `get_summary()` content test and `get_explanation()` conflict-surfacing test verify that the plan produces human-readable output — important because the UI depends entirely on these strings.
 
 **b. Confidence**
 
-- How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+**4.5 / 5.** The core scheduling logic, algorithm correctness, and edge case handling are thoroughly verified. The 0.5 gap reflects:
+- The Streamlit UI layer is not covered by automated tests (requires browser interaction testing).
+- Multi-pet conflict detection (tasks for different pets on the same owner's schedule) is not yet tested.
+- Preferred-time honoring under tight budgets has only one test scenario — more coverage here would increase confidence.
+
+If given more time, the next tests would be: a pet with 50+ tasks to verify performance doesn't degrade, tasks spanning midnight (e.g., "23:45" to "00:15"), and a full integration test driving the Streamlit app with `streamlit.testing`.
 
 ---
 
@@ -89,12 +110,14 @@ The alternative — placing each task at its `preferred_time` and filling gaps �
 
 **a. What went well**
 
-- What part of this project are you most satisfied with?
+The separation between the data layer (`CareTask`, `Pet`, `Owner`), the output layer (`ScheduledTask`, `SkippedTask`, `DailyPlan`), and the logic layer (`Scheduler`) worked exactly as designed. When new features were added in Phase 3 — sorting, filtering, conflict detection — they slotted in as static methods on `Scheduler` without touching any other class. The UML did its job: changes were additive, not structural. The `SkippedTask` design decision from Phase 1 also paid off in Phase 4 — the "skipped task reason mentions duration" edge case test would have been impossible to write if skipped tasks were stored as plain `CareTask` objects.
 
 **b. What you would improve**
 
-- If you had another iteration, what would you improve or redesign?
+The scheduler currently ignores `preferred_time` when assigning actual start times — it uses `preferred_time` only as a sort key. A future iteration would implement a "preferred-time-first" mode: place each task at its preferred time if the slot is free, fall back to sequential only if the slot is taken. This would make the schedule feel more natural to the owner and would make the conflict detection feature genuinely necessary for normal use rather than just for edge case demos.
+
+A second improvement would be multi-pet scheduling — a single `DailyPlan` covering all of the owner's pets, with shared time budget and cross-pet conflict detection.
 
 **c. Key takeaway**
 
-- What is one important thing you learned about designing systems or working with AI on this project?
+The most important lesson from this project is that **AI is a fast first-draft generator, not a design decision maker**. Every time the AI produced a suggestion — a method signature, a data structure, a test pattern — the useful question was not "does this code run?" but "does this fit the system I'm building?" The `dict` vs `SkippedTask` decision, the `datetime.time` vs string decision, and the choice to keep sequential scheduling over preferred-time placement were all moments where accepting the AI suggestion as-is would have made the code harder to read, test, or extend. The human role in an AI-assisted workflow is to hold the architectural vision and use AI to accelerate the *execution* of that vision — not to outsource the vision itself.

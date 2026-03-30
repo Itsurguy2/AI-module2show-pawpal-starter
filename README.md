@@ -1,6 +1,26 @@
 # PawPal+ (Module 2 Project)
 
-You are building **PawPal+**, a Streamlit app that helps a pet owner plan care tasks for their pet.
+> A smart daily pet care planner built with Python and Streamlit.
+
+## Features
+
+- **Priority-based scheduling** — Mandatory tasks (medication, feeding) are always placed first. Remaining tasks are ordered by HIGH / MEDIUM / LOW priority within the available time budget.
+- **Sort by time** — Tasks can be viewed sorted by preferred time (HH:MM) so you see the day in chronological order at a glance.
+- **Filter by status** — Switch between All Tasks, Sorted by Time, Pending, and Completed tabs to stay organized.
+- **Recurring task automation** — Mark a daily or weekly task complete and the app automatically queues the next occurrence with the correct due date using Python's `timedelta`.
+- **Conflict detection** — The scheduler checks every pair of scheduled tasks for time overlap using the interval-overlap formula. Conflicts surface as prominent red warnings in the UI.
+- **Skipped task explanations** — Any task that doesn't fit the time budget is listed with a plain-English reason so you know exactly what was cut and why.
+- **Session persistence** — Owner, pet, and task data survive page interactions via `st.session_state` — nothing resets mid-session.
+
+## Demo
+
+```
+py -m streamlit run app.py
+```
+
+*(Add a screenshot here once the app is running — use the Markdown image syntax in your project submission.)*
+
+---
 
 ## Scenario
 
@@ -58,6 +78,8 @@ classDiagram
         -preferred_task_order : list
         +add_pet(pet) None
         +get_pets() list
+        +get_all_tasks() list
+        +filter_tasks_by_pet(pet_name) list
     }
 
     class Pet {
@@ -79,13 +101,22 @@ classDiagram
         -is_mandatory : bool
         -preferred_time : str
         -frequency : str
+        -completed : bool
+        -due_date : str
         +is_schedulable(budget) bool
+        +mark_complete() None
+        +next_occurrence(from_date) CareTask
     }
 
     class ScheduledTask {
         -task : CareTask
         -start_time : str
         -end_time : str
+        -reason : str
+    }
+
+    class SkippedTask {
+        -task : CareTask
         -reason : str
     }
 
@@ -96,8 +127,9 @@ classDiagram
         -scheduled_tasks : list
         -skipped_tasks : list
         -total_minutes_used : int
+        -conflicts : list
         +add_scheduled(st) None
-        +add_skipped(task) None
+        +add_skipped(st) None
         +get_summary() str
         +get_explanation() str
     }
@@ -106,6 +138,9 @@ classDiagram
         -owner : Owner
         -pet : Pet
         +build_plan(date) DailyPlan
+        +sort_by_time(tasks) list
+        +filter_by_status(tasks, completed) list
+        +detect_conflicts(scheduled_tasks) list
         -sort_tasks() list
         -fits_budget(task, remaining) bool
         -assign_time(task, current_time) tuple
@@ -136,7 +171,9 @@ classDiagram
     Scheduler --> Pet : uses
     Scheduler ..> DailyPlan : creates
     DailyPlan "1" *-- "0..*" ScheduledTask : contains
+    DailyPlan "1" *-- "0..*" SkippedTask : contains
     ScheduledTask --> CareTask : wraps
+    SkippedTask --> CareTask : wraps
     CareTask --> Priority : uses
     CareTask --> TaskCategory : uses
 ```
