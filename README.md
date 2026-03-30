@@ -463,3 +463,82 @@ class Scheduler:
         """Return a human-readable explanation for why this task was scheduled."""
         pass  # TODO: implement
 ```
+
+---
+
+## Smarter Scheduling
+
+PawPal+ includes four algorithmic features that go beyond basic scheduling:
+
+### 1. Sort by Time
+`Scheduler.sort_by_time(tasks)` sorts any task list by `preferred_time` (HH:MM) using a Python lambda key. Tasks without a preferred time are pushed to the end using `"23:59"` as a sentinel value.
+
+```python
+sorted_tasks = Scheduler.sort_by_time(pet.get_tasks())
+```
+
+### 2. Filter by Status
+`Scheduler.filter_by_status(tasks, completed)` filters a task list to either pending or completed tasks using a list comprehension.
+
+```python
+pending   = Scheduler.filter_by_status(tasks, completed=False)
+completed = Scheduler.filter_by_status(tasks, completed=True)
+```
+
+### 3. Recurring Tasks
+`CareTask.next_occurrence(from_date)` uses Python's `timedelta` to generate the next copy of a recurring task. Daily tasks advance by 1 day, weekly tasks by 7 days. Non-recurring tasks (`frequency="once"`) return `None`.
+
+```python
+next_task = task.next_occurrence("2026-03-29")
+# next_task.due_date -> "2026-03-30"  (for daily)
+# next_task.due_date -> "2026-04-05"  (for weekly)
+```
+
+### 4. Conflict Detection
+`Scheduler.detect_conflicts(scheduled_tasks)` checks every pair of scheduled tasks for time overlap using the standard interval-overlap formula (`a_start < b_end AND b_start < a_end`). Returns a list of human-readable warning strings rather than raising an exception, so the plan can still be used.
+
+```python
+warnings = Scheduler.detect_conflicts(plan.scheduled_tasks)
+# e.g. ["'Morning Walk' (07:30-08:00) overlaps 'Feeding' (07:45-07:55)"]
+```
+
+`build_plan()` runs conflict detection automatically and stores any warnings in `DailyPlan.conflicts`.
+
+---
+
+## Testing PawPal+
+
+### How to run the tests
+
+```powershell
+py -m pytest
+```
+
+To see each test name individually:
+
+```powershell
+py -m pytest tests/ -v
+```
+
+### What the tests cover
+
+The test suite lives in [tests/test_pawpal.py](tests/test_pawpal.py) and contains **44 tests** organized into these categories:
+
+| Category | Count | What is verified |
+|---|---|---|
+| `CareTask` | 4 | `mark_complete()` flips status, idempotency, `is_schedulable()` fits and fails |
+| `Pet` | 3 | Task addition, count accuracy, `get_tasks()` returns a safe copy |
+| `Owner` | 1 | Pet addition |
+| `Scheduler — happy paths` | 5 | Schedules fitting tasks, skips oversize tasks, mandatory-first ordering, total minutes, summary text |
+| `sort_by_time` | 4 | Chronological order, no-preference pushed to end, empty list, tied times |
+| `filter_by_status` | 3 | Pending only, completed only, empty list |
+| Recurring tasks | 5 | Daily +1 day, weekly +7 days, resets `completed`, `once`→None, new task ID, preserves properties |
+| Conflict detection | 5 | Overlap found, back-to-back safe, exact same start time, empty list, only conflicting pair flagged |
+| `filter_tasks_by_pet` | 3 | Correct pet returned, case-insensitive match, unknown name returns empty |
+| Edge cases | 9 | Pet with no tasks, all tasks already completed, zero budget, exact budget fill, wake-time start, sequential assignment, end-time math, conflict text in explanation, skipped task reason is informative |
+
+### Confidence Level
+
+**4.5 / 5 stars**
+
+The core scheduling logic — priority ordering, time budget enforcement, mandatory task handling, recurring tasks, and conflict detection — is thoroughly verified with both happy-path and edge-case tests. The 0.5 deduction reflects areas not yet tested: multi-pet conflict detection across different pets, tasks whose preferred_time falls mid-schedule, and the Streamlit UI layer (which requires integration testing beyond pytest).
