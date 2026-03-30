@@ -30,6 +30,7 @@ if "owner"        not in st.session_state: st.session_state.owner        = None
 if "pet"          not in st.session_state: st.session_state.pet          = None
 if "task_counter" not in st.session_state: st.session_state.task_counter = 0
 if "last_plan"    not in st.session_state: st.session_state.last_plan    = None
+if "plan_date"    not in st.session_state: st.session_state.plan_date    = date.today()
 
 # ---------------------------------------------------------------------------
 # Helper maps
@@ -145,8 +146,9 @@ if st.session_state.pet is not None:
             ]
 
         with tab_all:
-            st.caption(f"{len(current_tasks)} task(s) for {st.session_state.pet.name}")
-            st.dataframe(_task_rows(current_tasks), use_container_width=True, hide_index=True)
+            active = Scheduler.filter_by_status(current_tasks, completed=False)
+            st.caption(f"{len(active)} active task(s) for {st.session_state.pet.name}")
+            st.dataframe(_task_rows(active), use_container_width=True, hide_index=True)
 
         with tab_sorted:
             sorted_tasks = Scheduler.sort_by_time(current_tasks)
@@ -184,15 +186,14 @@ if st.session_state.pet is not None:
             if st.button("Mark Complete"):
                 task_to_complete.mark_complete()
                 if task_to_complete.frequency != "once":
-                    today_str = date.today().strftime("%Y-%m-%d")
-                    next_t    = task_to_complete.next_occurrence(today_str)
+                    from_date = st.session_state.plan_date.strftime("%Y-%m-%d")
+                    next_t    = task_to_complete.next_occurrence(from_date)
                     st.session_state.pet.add_task(next_t)
-                    st.success(
-                        f"'{task_to_complete.title}' marked done. "
-                        f"Next {task_to_complete.frequency} occurrence added for {next_t.due_date}."
-                    )
+                    st.session_state.last_plan = None  # clear stale plan
+                    st.rerun()
                 else:
-                    st.success(f"'{task_to_complete.title}' marked complete (one-time task).")
+                    st.session_state.last_plan = None
+                    st.rerun()
         else:
             st.info("No pending tasks to complete.")
 
@@ -211,10 +212,16 @@ if st.session_state.pet is not None and st.session_state.pet.get_tasks():
         f"Start: **{st.session_state.owner.wake_time}**"
     )
 
+    st.session_state.plan_date = st.date_input(
+        "Schedule date",
+        value=st.session_state.plan_date,
+        help="Pick the date you want to generate a plan for.",
+    )
+
     if st.button("Generate Schedule", type="primary", use_container_width=True):
-        today     = date.today().strftime("%Y-%m-%d")
-        scheduler = Scheduler(owner=st.session_state.owner, pet=st.session_state.pet)
-        plan      = scheduler.build_plan(date=today)
+        plan_date_str = st.session_state.plan_date.strftime("%Y-%m-%d")
+        scheduler     = Scheduler(owner=st.session_state.owner, pet=st.session_state.pet)
+        plan          = scheduler.build_plan(date=plan_date_str)
         st.session_state.last_plan = plan
 
     # Display the plan (persists across re-runs via session_state)
